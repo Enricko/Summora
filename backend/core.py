@@ -894,8 +894,17 @@ class FlashcardAgent(AgentBase):
 You are Summora's independent Quiz Agent. Generate quiz questions using the specified quiz_type (e.g. image, essay, math, language, standard, or mixed).
 When generating image questions, provide an image_search_query.
 When generating essay questions, provide a grading rubric.
-When generating math questions, provide a latex_formula.
-When generating language questions, provide audio_text for TTS.
+When generating math questions, latex_formula is a HINT shown before the answer. Provide only the general
+formula needed to solve the question, using variable names. Never substitute the question's numbers, show
+intermediate calculations, or include the final result. Example: for a question asking for a risk score with
+Likelihood=3 and Impact=5, emit "\\\\text{Risk Score} = \\\\text{Likelihood} \\\\times \\\\text{Impact}",
+not "3 \\\\times 5 = 15". Use valid KaTeX. Because the output is JSON, escape every LaTeX backslash as a
+double backslash. Include spaces or braces after commands where appropriate.
+No question may contain its answer, a worked solution, or phrases such as "the answer is". Do not place
+the answer in parentheses, after a colon, or in any auxiliary field shown before reveal.
+When generating language questions, audio_text must be an exact character-for-character copy of question.
+Set pronunciation_guide to null unless pronunciation itself is what the learner is being asked to produce;
+it must never reveal the answer.
 Follow the exact requested count and difficulty distribution. Use an exact supplied heading for every source_section. Return valid JSON exactly matching the requested schema."""
 
     def _mock_flashcards(self, agent_input: FlashcardInput) -> FlashcardResult:
@@ -948,14 +957,27 @@ Follow the exact requested count and difficulty distribution. Use an exact suppl
                 question = f"Connection challenge {index + 1}: relate '{point.point}' to '{other.point}' without adding unsupported facts."
                 answer = f"The material states both ideas; a complete answer should explain their relationship without adding facts beyond {point.source_section} and {other.source_section}."
                 topic, source = "Concept connection", point.source_section
-            cards.append(StandardFlashcard(
+            requested_type = agent_input.quiz_type
+            if requested_type == "mixed":
+                requested_type = ("standard", "essay", "math", "language", "image")[index % 5]
+            common = dict(
                 question=question,
                 answer=answer,
                 difficulty=difficulty,
                 topic=topic,
                 source_section=source,
-                type="standard"
-            ))
+            )
+            if requested_type == "essay":
+                cards.append(EssayQuestion(**common, rubric="Explain the key idea accurately, connect it to the source, and avoid unsupported claims."))
+            elif requested_type == "math":
+                formula = next((item.term for item in terms if item.category == "formula"), r"\text{Explain the relationship shown in the source}")
+                cards.append(MathQuestion(**common, latex_formula=formula))
+            elif requested_type == "language":
+                cards.append(LanguageQuestion(**common, audio_text=question, pronunciation_guide=None))
+            elif requested_type == "image":
+                cards.append(ImageQuestion(**common, image_search_query=topic))
+            else:
+                cards.append(StandardFlashcard(**common))
         return FlashcardResult(flashcards=cards)
 
     @staticmethod
@@ -986,6 +1008,30 @@ Follow the exact requested count and difficulty distribution. Use an exact suppl
                 selected.append(original.model_copy(update={"difficulty": level}))
         return selected[:requested_count]
 
+    @staticmethod
+    def _sanitize_pre_reveal_content(cards: list[QuizQuestion]) -> list[QuizQuestion]:
+        """Ensure auxiliary quiz fields cannot disclose answers before reveal."""
+        sanitized: list[QuizQuestion] = []
+        for card in cards:
+            if isinstance(card, LanguageQuestion):
+                card = card.model_copy(update={
+                    "audio_text": card.question,
+                    "pronunciation_guide": None,
+                })
+            sanitized.append(card)
+        return sanitized
+
+    @staticmethod
+    def _answer_leak_indices(cards: list[QuizQuestion]) -> list[int]:
+        """Find short answers copied verbatim into their own visible question."""
+        leaked: list[int] = []
+        for index, card in enumerate(cards):
+            answer = normalize_question(card.answer)
+            question = normalize_question(card.question)
+            if 2 <= len(answer.split()) <= 6 and 3 <= len(answer) <= 80 and answer in question:
+                leaked.append(index)
+        return leaked
+
     def _prompt(self, agent_input: FlashcardInput, prior: Optional[FlashcardResult] = None) -> str:
         targets = difficulty_targets(agent_input.requested_count)
         revision = "\n".join(f"- {item}" for item in agent_input.revision_instructions) or "None"
@@ -1015,19 +1061,34 @@ GROUNDED SUMMARY:
             return self._mock_flashcards(validated)
         first = self._generate_validated(self._prompt(validated), FlashcardResult)
         cleaned = self._deduplicate(first.flashcards)
-        balanced = self._enforce_distribution(cleaned, validated.requested_count)
+        balanced = self._sanitize_pre_reveal_content(
+            self._enforce_distribution(cleaned, validated.requested_count)
+        )
         targets = difficulty_targets(validated.requested_count)
         actual = Counter(card.difficulty for card in balanced)
-        if len(balanced) == validated.requested_count and all(actual[level] == targets[level] for level in targets):
+        leaks = self._answer_leak_indices(balanced)
+        if (
+            len(balanced) == validated.requested_count
+            and all(actual[level] == targets[level] for level in targets)
+            and not leaks
+        ):
             return FlashcardResult(flashcards=balanced)
 
         second = self._generate_validated(self._prompt(validated, first), FlashcardResult)
         combined = self._deduplicate(second.flashcards + cleaned)
-        balanced = self._enforce_distribution(combined, validated.requested_count)
+        balanced = self._sanitize_pre_reveal_content(
+            self._enforce_distribution(combined, validated.requested_count)
+        )
         actual = Counter(card.difficulty for card in balanced)
-        if len(balanced) != validated.requested_count or any(actual[level] != targets[level] for level in targets):
+        leaks = self._answer_leak_indices(balanced)
+        if (
+            len(balanced) != validated.requested_count
+            or any(actual[level] != targets[level] for level in targets)
+            or leaks
+        ):
             raise AgentOutputError(
-                f"Flashcard output could not satisfy count/distribution after revision. Expected {targets}; got {dict(actual)}."
+                "Quiz output could not satisfy the pre-reveal quality rules after revision. "
+                f"Expected difficulty counts {targets}; got {dict(actual)}; answer leaks at {leaks}."
             )
         return FlashcardResult(flashcards=balanced)
 
@@ -1043,6 +1104,9 @@ class ReviewerAgent(AgentBase):
 You are Summora's independent Reviewer Agent. Compare every generated claim and formula against only the
 supplied original educational material. Detect unsupported statements, missing important concepts,
 duplicate or ambiguous flashcards, overly long answers, incorrect formulas, poor difficulty labels,
+math formula hints that reveal substituted values, intermediate work, or the final answer,
+questions or pre-reveal auxiliary fields that contain the answer, and language audio_text that differs
+from the visible question,
 grammar problems, and explanations unsuitable for the selected student education level. Do not introduce
 new subject-matter facts. Cite exact source headings in issue descriptions when possible. Follow the
 selected output language. Score quality from 0 to 100; approved must be true exactly when the score is at
@@ -1534,8 +1598,17 @@ class SummoraOrchestrator:
         return result
 
     @staticmethod
-    def _research_as_document(research: WebResearchResult) -> str:
-        """Render cited research as explicit source material for the core agents."""
+    def _research_as_document(
+        research: WebResearchResult,
+        maximum_source_characters: int = 2_000,
+    ) -> str:
+        """Render cited research without sending oversized raw pages through every agent.
+
+        The research synthesis and key findings remain complete. Individual source
+        excerpts are capped because search providers can return entire pages, which
+        otherwise creates several summary/reduction calls and makes an interactive
+        request appear to have stalled.
+        """
         lines = [
             "# Web Research Question", research.query, "", "# Research Synthesis", research.answer,
             "", "# Key Findings",
@@ -1546,7 +1619,8 @@ class SummoraOrchestrator:
         )
         lines.extend(["", "# Web Sources"])
         lines.extend(
-            f"## [{source.source_id}] {source.title}\nURL: {source.url}\n{source.content}"
+            f"## [{source.source_id}] {source.title}\nURL: {source.url}\n"
+            f"{source.content[:maximum_source_characters]}"
             for source in research.sources
         )
         if research.limitations:
@@ -2025,5 +2099,3 @@ def evaluate_csv_dataset(
 # Example after creating `summora` in Section 15:
 # EVALUATION_RESULTS = evaluate_csv_dataset("sample_evaluation.csv", summora, maximum_rows=5)
 # display(EVALUATION_RESULTS)
-
-

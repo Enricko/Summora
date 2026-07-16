@@ -1,29 +1,65 @@
-import { Image as ImageIcon } from 'lucide-react';
+import { useEffect, useState } from 'react'
+import { Image as ImageIcon, LoaderCircle } from 'lucide-react'
+
+const COMMONS_API = 'https://commons.wikimedia.org/w/api.php'
 
 export default function ImageQuestion({ question }) {
-  // We use unsplash source as a mock for the requested image_search_query
-  const encodedQuery = encodeURIComponent(question.image_search_query || question.topic);
-  const imageUrl = `https://source.unsplash.com/400x300/?${encodedQuery}`;
+  const query = (question.image_search_query || question.topic || question.question).slice(0, 140)
+  const [image, setImage] = useState(null)
+  const [status, setStatus] = useState('loading')
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const params = new URLSearchParams({
+      action: 'query', generator: 'search', gsrsearch: query, gsrnamespace: '6',
+      gsrlimit: '5', prop: 'imageinfo', iiprop: 'url|extmetadata', iiurlwidth: '1000',
+      format: 'json', origin: '*',
+    })
+
+    setStatus('loading')
+    fetch(`${COMMONS_API}?${params}`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('Image lookup failed')
+        return response.json()
+      })
+      .then((data) => {
+        const pages = Object.values(data.query?.pages || {})
+        const match = pages.find((page) => page.imageinfo?.[0]?.thumburl || page.imageinfo?.[0]?.url)
+        if (!match) throw new Error('No matching image')
+        const info = match.imageinfo[0]
+        setImage({
+          url: info.thumburl || info.url,
+          alt: match.title?.replace(/^File:/, '') || query,
+          source: info.descriptionurl,
+        })
+        setStatus('ready')
+      })
+      .catch((error) => {
+        if (error.name !== 'AbortError') setStatus('error')
+      })
+
+    return () => controller.abort()
+  }, [query])
 
   return (
-    <div>
-      <div style={{ 
-        width: '100%', 
-        height: '200px', 
-        backgroundColor: 'rgba(0,0,0,0.3)', 
-        borderRadius: '8px', 
-        marginBottom: '1rem',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'hidden',
-        position: 'relative'
-      }}>
-        {/* We use an img tag pointing to Unsplash for demo purposes */}
-        <img src={imageUrl} alt={question.image_search_query} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display='none' }} />
-        <ImageIcon size={48} style={{ opacity: 0.2, position: 'absolute' }} />
+    <div className="image-question">
+      <div className={`question-image ${status}`}>
+        {status === 'loading' && <div className="image-state"><LoaderCircle className="image-spinner" size={28} /><span>Finding a relevant image…</span></div>}
+        {status === 'ready' && image && (
+          <>
+            <img src={image.url} alt={image.alt} onError={() => setStatus('error')} />
+            {image.source && <a href={image.source} target="_blank" rel="noreferrer">Image from Wikimedia Commons</a>}
+          </>
+        )}
+        {status === 'error' && (
+          <div className="image-state image-fallback" role="img" aria-label={`Visual prompt for ${query}`}>
+            <ImageIcon size={34} />
+            <strong>Visual prompt</strong>
+            <span>{query}</span>
+          </div>
+        )}
       </div>
-      <p style={{ fontSize: '1.1rem', marginBottom: '1rem', textAlign: 'center' }}>{question.question}</p>
+      <p>{question.question}</p>
     </div>
-  );
+  )
 }
