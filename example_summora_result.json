@@ -1,0 +1,247 @@
+{
+  "success": true,
+  "reader_result": {
+    "document_title": "Photosynthesis: How Plants Store Light Energy",
+    "subject": "Biology",
+    "language": "English",
+    "sections": [
+      {
+        "heading": "Overview",
+        "content": "Photosynthesis is the process by which plants, algae, and some bacteria convert light energy into chemical energy. In plants, most photosynthesis occurs in chloroplasts. Chlorophyll pigments absorb light, especially red and blue wavelengths."
+      },
+      {
+        "heading": "Overall Equation",
+        "content": "The simplified equation is:\n\n6 CO2 + 6 H2O + light energy -> C6H12O6 + 6 O2\n\nThis equation shows that carbon dioxide and water are used to form glucose and oxygen. It is a summary: the actual process consists of many enzyme-controlled reactions."
+      },
+      {
+        "heading": "Light-Dependent Reactions",
+        "content": "The light-dependent reactions occur in the thylakoid membranes. Light excites electrons in chlorophyll. Water is split, releasing oxygen. The reactions produce ATP and NADPH, which carry energy and reducing power to the Calvin cycle."
+      },
+      {
+        "heading": "Calvin Cycle",
+        "content": "The Calvin cycle occurs in the stroma. It does not use light directly. The enzyme RuBisCO helps fix carbon dioxide into organic molecules. ATP and NADPH from the light-dependent reactions help produce G3P, a molecule that can be used to build glucose and other carbohydrates."
+      },
+      {
+        "heading": "Limiting Factors",
+        "content": "The rate of photosynthesis can be limited by light intensity, carbon dioxide concentration, temperature, and water availability. Increasing one factor will not keep increasing the rate when another factor becomes limiting."
+      },
+      {
+        "heading": "Why Photosynthesis Matters",
+        "content": "Photosynthesis supplies chemical energy to most ecosystems and releases much of the oxygen used in aerobic respiration. It also removes carbon dioxide from the atmosphere while carbon is incorporated into organic molecules."
+      }
+    ],
+    "total_characters": 1631
+  },
+  "summary_result": {
+    "short_summary": "Photosynthesis stores light energy as chemical energy. In plants, light-dependent reactions produce ATP and NADPH and release oxygen, while the Calvin cycle uses those products to help convert carbon dioxide into carbohydrate precursors.",
+    "detailed_summary": "Plants perform most photosynthesis in chloroplasts, where chlorophyll absorbs light. The light-dependent reactions in thylakoid membranes excite electrons, split water, release oxygen, and produce ATP and NADPH. The Calvin cycle in the stroma does not use light directly; RuBisCO helps fix carbon dioxide, and ATP plus NADPH help form G3P that can be used to build glucose and other carbohydrates. The simplified overall equation is 6 CO2 + 6 H2O + light energy -> C6H12O6 + 6 O2. Light intensity, carbon dioxide concentration, temperature, and water availability can limit the rate.",
+    "key_points": [
+      {
+        "point": "Photosynthesis converts light energy into chemical energy.",
+        "source_section": "Overview"
+      },
+      {
+        "point": "Light-dependent reactions produce ATP and NADPH and release oxygen.",
+        "source_section": "Light-Dependent Reactions"
+      },
+      {
+        "point": "The Calvin cycle uses ATP and NADPH to help fix carbon and form G3P.",
+        "source_section": "Light-Dependent Reactions"
+      },
+      {
+        "point": "The overall equation summarizes a multi-step, enzyme-controlled process.",
+        "source_section": "Overall Equation"
+      },
+      {
+        "point": "Several environmental factors can limit the photosynthesis rate.",
+        "source_section": "Limiting Factors"
+      }
+    ],
+    "important_terms": [
+      {
+        "term": "Photosynthesis",
+        "definition": "The process that converts light energy into chemical energy.",
+        "category": "definition",
+        "source_section": "Overview"
+      },
+      {
+        "term": "Chlorophyll",
+        "definition": "A pigment that absorbs light used in photosynthesis.",
+        "category": "definition",
+        "source_section": "Overview"
+      },
+      {
+        "term": "ATP and NADPH",
+        "definition": "Products of the light-dependent reactions that supply energy and reducing power to the Calvin cycle.",
+        "category": "concept",
+        "source_section": "Light-Dependent Reactions"
+      },
+      {
+        "term": "RuBisCO",
+        "definition": "The enzyme described as helping fix carbon dioxide in the Calvin cycle.",
+        "category": "name",
+        "source_section": "Light-Dependent Reactions"
+      },
+      {
+        "term": "6 CO2 + 6 H2O + light energy -> C6H12O6 + 6 O2",
+        "definition": "The simplified overall equation for photosynthesis.",
+        "category": "formula",
+        "source_section": "Overall Equation"
+      }
+    ],
+    "practice_questions": [
+      {
+        "question": "How are the light-dependent reactions connected to the Calvin cycle?",
+        "answer_guide": "They supply ATP and NADPH, which the Calvin cycle uses to help form G3P.",
+        "source_section": "Light-Dependent Reactions"
+      },
+      {
+        "question": "Why can increasing light stop increasing the rate of photosynthesis?",
+        "answer_guide": "Another factor, such as carbon dioxide, temperature, or water, may become limiting.",
+        "source_section": "Limiting Factors"
+      },
+      {
+        "question": "What does the simplified equation show?",
+        "answer_guide": "Carbon dioxide and water, with light energy, are summarized as forming glucose and oxygen.",
+        "source_section": "Overall Equation"
+      }
+    ],
+    "learning_recommendations": [
+      "Draw a chloroplast and label where each reaction stage occurs.",
+      "Practice connecting ATP and NADPH production to their use in the Calvin cycle.",
+      "Memorize the overall equation only after explaining what each term represents."
+    ]
+  },
+  "flashcard_result": {
+    "flashcards": [
+      {
+        "question": "What does 'Photosynthesis' mean?",
+        "answer": "The process that converts light energy into chemical energy.",
+        "difficulty": "easy",
+        "topic": "Photosynthesis",
+        "source_section": "Overview"
+      },
+      {
+        "question": "Which key fact should you recall from Light-Dependent Reactions: Light-dependent reactions produce ATP and NADPH and release oxygen.",
+        "answer": "Light-dependent reactions produce ATP and NADPH and release oxygen.",
+        "difficulty": "easy",
+        "topic": "Light-dependent reactions produce ATP and NADPH and release oxygen.",
+        "source_section": "Light-Dependent Reactions"
+      },
+      {
+        "question": "State the idea represented by this source detail: The Calvin cycle uses ATP and NADPH to help fix carbon and form G3P.",
+        "answer": "The Calvin cycle uses ATP and NADPH to help fix carbon and form G3P.",
+        "difficulty": "easy",
+        "topic": "The Calvin cycle uses ATP and NADPH to help fix carbon and form G3P.",
+        "source_section": "Light-Dependent Reactions"
+      },
+      {
+        "question": "What happens according to the section Overall Equation?",
+        "answer": "The overall equation summarizes a multi-step, enzyme-controlled process.",
+        "difficulty": "easy",
+        "topic": "The overall equation summarizes a multi-step, enzyme-controlled proces",
+        "source_section": "Overall Equation"
+      },
+      {
+        "question": "Identify the topic connected to this fact: Several environmental factors can limit the photosynthesis rate.",
+        "answer": "Several environmental factors can limit the photosynthesis rate.",
+        "difficulty": "easy",
+        "topic": "Several environmental factors can limit the photosynthesis rate.",
+        "source_section": "Limiting Factors"
+      },
+      {
+        "question": "Give a one-sentence recall of key idea 6 from Overview.",
+        "answer": "Photosynthesis converts light energy into chemical energy.",
+        "difficulty": "easy",
+        "topic": "Photosynthesis converts light energy into chemical energy.",
+        "source_section": "Overview"
+      },
+      {
+        "question": "Explain this idea in your own words: Light-dependent reactions produce ATP and NADPH and release oxygen.",
+        "answer": "Light-dependent reactions produce ATP and NADPH and release oxygen.",
+        "difficulty": "medium",
+        "topic": "Light-dependent reactions produce ATP and NADPH and release oxygen.",
+        "source_section": "Light-Dependent Reactions"
+      },
+      {
+        "question": "How does Light-Dependent Reactions support the following idea: The Calvin cycle uses ATP and NADPH to help fix carbon and form G3P.",
+        "answer": "The Calvin cycle uses ATP and NADPH to help fix carbon and form G3P.",
+        "difficulty": "medium",
+        "topic": "The Calvin cycle uses ATP and NADPH to help fix carbon and form G3P.",
+        "source_section": "Light-Dependent Reactions"
+      },
+      {
+        "question": "Turn this grounded statement into a cause-and-effect explanation where possible: The overall equation summarizes a multi-step, enzyme-controlled process.",
+        "answer": "The overall equation summarizes a multi-step, enzyme-controlled process.",
+        "difficulty": "medium",
+        "topic": "The overall equation summarizes a multi-step, enzyme-controlled proces",
+        "source_section": "Overall Equation"
+      },
+      {
+        "question": "What misunderstanding could be corrected by this source fact: Several environmental factors can limit the photosynthesis rate.",
+        "answer": "Several environmental factors can limit the photosynthesis rate.",
+        "difficulty": "medium",
+        "topic": "Several environmental factors can limit the photosynthesis rate.",
+        "source_section": "Limiting Factors"
+      },
+      {
+        "question": "Summarize the role of this idea within Overview: Photosynthesis converts light energy into chemical energy.",
+        "answer": "Photosynthesis converts light energy into chemical energy.",
+        "difficulty": "medium",
+        "topic": "Photosynthesis converts light energy into chemical energy.",
+        "source_section": "Overview"
+      },
+      {
+        "question": "How would you teach key idea 12 without adding facts beyond Light-Dependent Reactions?",
+        "answer": "Light-dependent reactions produce ATP and NADPH and release oxygen.",
+        "difficulty": "medium",
+        "topic": "Light-dependent reactions produce ATP and NADPH and release oxygen.",
+        "source_section": "Light-Dependent Reactions"
+      },
+      {
+        "question": "Connection challenge 13: relate 'The Calvin cycle uses ATP and NADPH to help fix carbon and form G3P.' to 'The overall equation summarizes a multi-step, enzyme-controlled process.' without adding unsupported facts.",
+        "answer": "The material states both ideas; a complete answer should explain their relationship without adding facts beyond Light-Dependent Reactions and Overall Equation.",
+        "difficulty": "hard",
+        "topic": "Concept connection",
+        "source_section": "Light-Dependent Reactions"
+      },
+      {
+        "question": "Connection challenge 14: relate 'The overall equation summarizes a multi-step, enzyme-controlled process.' to 'Several environmental factors can limit the photosynthesis rate.' without adding unsupported facts.",
+        "answer": "The material states both ideas; a complete answer should explain their relationship without adding facts beyond Overall Equation and Limiting Factors.",
+        "difficulty": "hard",
+        "topic": "Concept connection",
+        "source_section": "Overall Equation"
+      },
+      {
+        "question": "Connection challenge 15: relate 'Several environmental factors can limit the photosynthesis rate.' to 'Photosynthesis converts light energy into chemical energy.' without adding unsupported facts.",
+        "answer": "The material states both ideas; a complete answer should explain their relationship without adding facts beyond Limiting Factors and Overview.",
+        "difficulty": "hard",
+        "topic": "Concept connection",
+        "source_section": "Limiting Factors"
+      }
+    ]
+  },
+  "review_result": {
+    "quality_score": 96,
+    "approved": true,
+    "issues": [],
+    "revision_instructions": []
+  },
+  "agent_status": {
+    "reader": "completed",
+    "summary": "completed",
+    "flashcard": "completed",
+    "reviewer": "completed"
+  },
+  "warnings": [],
+  "metadata": {
+    "provider": "mock",
+    "model": "mock",
+    "source_usage": {
+      "characters": 1444,
+      "approximate_tokens": 361
+    },
+    "completed_at": "2026-07-10T07:28:37.073406+00:00",
+    "automatic_revision_used": false
+  }
+}
