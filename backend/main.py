@@ -1,9 +1,9 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import os
 import uvicorn
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,6 +13,7 @@ from .models import (
     WebResearchInput,
     FlashcardInput,
     SummaryInput,
+    ReviewerInput,
     QuizQuestion
 )
 from .core import (
@@ -81,10 +82,11 @@ def get_orchestrator():
     return SummoraOrchestrator(provider=provider, config=config, web_search_provider=web_provider)
 
 class QuizRequest(BaseModel):
-    text: str
-    quiz_type: str = "mixed"
-    count: int = 5
+    text: str = Field(min_length=1, max_length=200_000)
+    quiz_type: Literal["mixed", "image", "essay", "math", "language", "standard"] = "mixed"
+    count: int = Field(default=5, ge=1, le=20)
     education_level: str = "university"
+    summary_length: Literal["short", "medium", "detailed"] = "medium"
 
 @app.post("/api/quiz")
 async def generate_quiz(req: QuizRequest):
@@ -97,7 +99,7 @@ async def generate_quiz(req: QuizRequest):
     # 2. Summary Agent
     summary_input = SummaryInput(
         document=reader_result,
-        summary_length="medium",
+        summary_length=req.summary_length,
         education_level=req.education_level,
         output_language="English"
     )
@@ -113,10 +115,45 @@ async def generate_quiz(req: QuizRequest):
         quiz_type=req.quiz_type
     )
     flashcard_result = orchestrator.flashcard_agent.execute(flashcard_input)
+
+    # 4. Reviewer Agent: audit the generated learning material before returning it.
+    review_input = ReviewerInput(
+        document=reader_result,
+        summary=summary_result,
+        flashcards=flashcard_result,
+        education_level=req.education_level,
+        output_language="English"
+    )
+    review_result = orchestrator.reviewer_agent.execute(review_input)
+
+    # Apply one focused revision when the reviewer detects grounding or clarity issues.
+    if not review_result.approved:
+        instructions = review_result.revision_instructions or review_result.issues
+        summary_result = orchestrator.summary_agent.execute(
+            summary_input.model_copy(update={"revision_instructions": instructions})
+        )
+        flashcard_result = orchestrator.flashcard_agent.execute(
+            flashcard_input.model_copy(update={
+                "summary": summary_result,
+                "revision_instructions": instructions,
+            })
+        )
+        review_result = orchestrator.reviewer_agent.execute(
+            review_input.model_copy(update={
+                "summary": summary_result,
+                "flashcards": flashcard_result,
+            })
+        )
     
     return {
         "summary": summary_result.model_dump(),
-        "quiz": flashcard_result.model_dump()
+        "quiz": flashcard_result.model_dump(),
+        "review": review_result.model_dump(),
+        "document": {
+            "title": reader_result.document_title,
+            "subject": reader_result.subject,
+            "sections": [section.heading for section in reader_result.sections],
+        }
     }
 
 class ResearchRequest(BaseModel):

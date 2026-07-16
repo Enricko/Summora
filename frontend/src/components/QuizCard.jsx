@@ -1,65 +1,45 @@
-import { useState } from 'react';
-import MathQuestion from './MathQuestion';
-import LanguageQuestion from './LanguageQuestion';
-import ImageQuestion from './ImageQuestion';
-import EssayQuestion from './EssayQuestion';
-import { HelpCircle, CheckCircle } from 'lucide-react';
+import { useState } from 'react'
+import MathQuestion from './MathQuestion'
+import LanguageQuestion from './LanguageQuestion'
+import ImageQuestion from './ImageQuestion'
+import EssayQuestion from './EssayQuestion'
+import { Check, Eye, RotateCcw, X } from 'lucide-react'
 
-export default function QuizCard({ question, index }) {
-  const [revealed, setRevealed] = useState(false);
+export default function QuizCard({ question, index, assessment, onAssess }) {
+  const [revealed, setRevealed] = useState(false)
 
-  const getDifficultyClass = (diff) => {
-    switch (diff) {
-      case 'easy': return 'badge-easy';
-      case 'medium': return 'badge-medium';
-      case 'hard': return 'badge-hard';
-      default: return 'badge-easy';
-    }
-  }
-
-  const renderContent = () => {
+  const content = () => {
     switch (question.type) {
-      case 'math':
-        return <MathQuestion question={question} />;
-      case 'language':
-        return <LanguageQuestion question={question} />;
-      case 'image':
-        return <ImageQuestion question={question} />;
-      case 'essay':
-        return <EssayQuestion question={question} />;
-      default:
-        return <p style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>{question.question}</p>;
+      case 'math': return <MathQuestion question={question} />
+      case 'language': return <LanguageQuestion question={question} />
+      case 'image': return <ImageQuestion question={question} />
+      case 'essay': return <EssayQuestion question={question} />
+      default: return <p className="question-text">{question.question}</p>
     }
   }
 
   return (
-    <div className="question-card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Q{index + 1}</span>
-        <div>
-          <span className={`badge ${getDifficultyClass(question.difficulty)}`}>{question.difficulty}</span>
-          <span className="badge badge-type">{question.type}</span>
-        </div>
+    <article className="quiz-card">
+      <div className="question-meta">
+        <span>Q{index + 1}</span>
+        <div><span className={`difficulty ${question.difficulty}`}>{question.difficulty}</span><span className="type-badge">{question.type}</span></div>
       </div>
-      
-      {renderContent()}
+      {content()}
+      <p className="source-note">From: {question.source_section}</p>
 
-      <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center' }}>
-        {!revealed ? (
-          <button className="btn btn-secondary" onClick={() => setRevealed(true)} style={{ width: '100%' }}>
-            <HelpCircle size={18} /> Reveal Answer
-          </button>
-        ) : (
-          <div style={{ width: '100%' }}>
-            <button className="btn btn-secondary" onClick={() => setRevealed(false)} style={{ width: '100%', marginBottom: '1rem', background: 'rgba(74, 222, 128, 0.1)', borderColor: '#4ade80', color: '#4ade80' }}>
-              <CheckCircle size={18} /> Hide Answer
-            </button>
-            <div className="answer-reveal">
-              <strong>Answer:</strong> {question.answer}
-            </div>
+      {!revealed ? (
+        <button className="button answer-button" onClick={() => setRevealed(true)}><Eye size={18} /> Show answer</button>
+      ) : (
+        <div className="answer-area">
+          <div className="answer-heading"><span><Check size={17} /> Answer</span><button onClick={() => setRevealed(false)} aria-label="Hide answer"><RotateCcw size={16} /></button></div>
+          <p>{question.answer}</p>
+          <div className="reflection">
+            <span>Did you get it?</span>
+            <button className={assessment === false ? 'selected review' : ''} onClick={() => onAssess(false)}><X size={16} /> Review again</button>
+            <button className={assessment === true ? 'selected understood' : ''} onClick={() => onAssess(true)}><Check size={16} /> I understood</button>
           </div>
-        )}
-      </div>
-    </div>
-  );
+        </div>
+      )}
+    </article>
+  )
 }
