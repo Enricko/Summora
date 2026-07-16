@@ -4,6 +4,9 @@ from pydantic import BaseModel
 import os
 import uvicorn
 from typing import Optional, Dict, Any
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from .models import (
     ReaderInput,
@@ -15,12 +18,15 @@ from .models import (
 from .core import (
     SummoraOrchestrator,
     GeminiProvider,
+    DeepSeekProvider,
+    MockProvider,
+    TavilySearchProvider,
+    MockWebSearchProvider,
     DEFAULT_MODELS,
     ReaderAgent,
     SummaryAgent,
     FlashcardAgent,
     WebResearchAgent,
-    TavilySearchProvider
 )
 
 app = FastAPI(title="Summora Quiz API")
@@ -35,14 +41,25 @@ app.add_middleware(
 
 def get_orchestrator():
     # Setup Provider
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not set")
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    deepseek_key = os.environ.get("DEEPSEEK_API_KEY")
     
-    provider = GeminiProvider(api_key=api_key)
+    if deepseek_key:
+        provider = DeepSeekProvider(api_key=deepseek_key)
+        provider_name = "deepseek"
+        model_name = "deepseek-v4-flash"
+    elif gemini_key:
+        provider = GeminiProvider(api_key=gemini_key)
+        provider_name = "gemini"
+        model_name = "gemini-3.5-flash"
+    else:
+        provider = MockProvider()
+        provider_name = "mock"
+        model_name = "mock"
+    
     config = {
-        "provider": "gemini",
-        "model_name": "gemini-3.5-flash",
+        "provider": provider_name,
+        "model_name": model_name,
         "summary_length": "medium",
         "flashcard_count": 5,
         "education_level": "university",
@@ -59,7 +76,7 @@ def get_orchestrator():
     }
     
     tavily_api_key = os.environ.get("TAVILY_API_KEY")
-    web_provider = TavilySearchProvider(api_key=tavily_api_key) if tavily_api_key else None
+    web_provider = TavilySearchProvider(api_key=tavily_api_key, config=config) if tavily_api_key else MockWebSearchProvider()
     
     return SummoraOrchestrator(provider=provider, config=config, web_search_provider=web_provider)
 
@@ -120,6 +137,29 @@ async def do_research(req: ResearchRequest):
         "research": research.model_dump(),
         "document_text": doc_text
     }
+
+@app.post("/api/upload_pdf")
+async def upload_pdf(file: UploadFile = File(...)):
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+    
+    # Save the file temporarily
+    temp_path = f"/tmp/{file.filename}"
+    try:
+        with open(temp_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        # Import here to avoid circular imports if any, or just use core
+        from .core import read_pdf_file
+        text = read_pdf_file(temp_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process PDF: {str(e)}")
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+            
+    return {"text": text}
 
 if __name__ == "__main__":
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)

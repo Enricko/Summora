@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Sparkles, Globe, Brain, Loader } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Sparkles, Globe, Brain, UploadCloud } from 'lucide-react'
 import QuizCard from './components/QuizCard'
 
 function App() {
@@ -8,8 +8,10 @@ function App() {
   const [level, setLevel] = useState('university')
   const [useWeb, setUseWeb] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
+  const fileInputRef = useRef(null)
 
   const generateQuiz = async () => {
     if (!text.trim()) {
@@ -53,6 +55,36 @@ function App() {
     }
   }
 
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    if (file.type !== 'application/pdf') {
+      setError('Please upload a PDF file.')
+      return
+    }
+
+    setUploading(true)
+    setError('')
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch('http://localhost:8000/api/upload_pdf', {
+        method: 'POST',
+        body: formData
+      })
+      if (!res.ok) throw new Error('Failed to upload PDF')
+      const data = await res.json()
+      setText(data.text)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUploading(false)
+      // Reset input so the same file can be uploaded again if needed
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   return (
     <div className="app-container">
       <header className="header">
@@ -63,7 +95,26 @@ function App() {
       <main>
         <section className="glass-panel">
           <div className="form-group">
-            <label>Source Text or Topic</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <label style={{ margin: 0 }}>Source Text or Topic</label>
+              
+              <input 
+                type="file" 
+                accept="application/pdf" 
+                ref={fileInputRef} 
+                style={{ display: 'none' }} 
+                onChange={handleFileUpload}
+              />
+              <button 
+                className="btn" 
+                style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(255, 255, 255, 0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)' }}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? <span className="loader" style={{width: 14, height: 14}}></span> : <UploadCloud size={14} />}
+                {uploading ? 'Extracting...' : 'Upload PDF'}
+              </button>
+            </div>
             <textarea 
               className="textarea" 
               rows={5} 

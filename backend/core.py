@@ -445,7 +445,7 @@ def normalize_question(question: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", question.casefold()).strip()
 
 
-def detect_duplicate_flashcards(cards: list[Flashcard], similarity_threshold: float = 0.92) -> list[tuple[int, int]]:
+def detect_duplicate_flashcards(cards: list[QuizQuestion], similarity_threshold: float = 0.92) -> list[tuple[int, int]]:
     """Return exact and near-duplicate question index pairs."""
     duplicates: list[tuple[int, int]] = []
     normalized = [normalize_question(card.question) for card in cards]
@@ -910,7 +910,7 @@ Follow the exact requested count and difficulty distribution. Use an exact suppl
             )
         ]
         points = summary.key_points
-        cards: list[Flashcard] = []
+        cards: list[QuizQuestion] = []
         labels = [level for level in ("easy", "medium", "hard") for _ in range(targets[level])]
         for index, difficulty in enumerate(labels):
             term = terms[index % len(terms)]
@@ -948,18 +948,19 @@ Follow the exact requested count and difficulty distribution. Use an exact suppl
                 question = f"Connection challenge {index + 1}: relate '{point.point}' to '{other.point}' without adding unsupported facts."
                 answer = f"The material states both ideas; a complete answer should explain their relationship without adding facts beyond {point.source_section} and {other.source_section}."
                 topic, source = "Concept connection", point.source_section
-            cards.append(Flashcard(
+            cards.append(StandardFlashcard(
                 question=question,
                 answer=answer,
                 difficulty=difficulty,
                 topic=topic,
                 source_section=source,
+                type="standard"
             ))
         return FlashcardResult(flashcards=cards)
 
     @staticmethod
-    def _deduplicate(cards: list[Flashcard]) -> list[Flashcard]:
-        kept: list[Flashcard] = []
+    def _deduplicate(cards: list[QuizQuestion]) -> list[QuizQuestion]:
+        kept: list[QuizQuestion] = []
         for card in cards:
             candidate = normalize_question(card.question)
             if any(SequenceMatcher(None, candidate, normalize_question(existing.question)).ratio() >= 0.92 for existing in kept):
@@ -968,11 +969,11 @@ Follow the exact requested count and difficulty distribution. Use an exact suppl
         return kept
 
     @staticmethod
-    def _enforce_distribution(cards: list[Flashcard], requested_count: int) -> list[Flashcard]:
+    def _enforce_distribution(cards: list[QuizQuestion], requested_count: int) -> list[QuizQuestion]:
         targets = difficulty_targets(requested_count)
         buckets = {level: [card for card in cards if card.difficulty == level] for level in targets}
-        selected: list[Flashcard] = []
-        leftovers: list[Flashcard] = []
+        selected: list[QuizQuestion] = []
+        leftovers: list[QuizQuestion] = []
         for level in ("easy", "medium", "hard"):
             selected.extend(buckets[level][:targets[level]])
             leftovers.extend(buckets[level][targets[level]:])
@@ -1815,7 +1816,7 @@ def run_flashcard_quiz(flashcard_result: FlashcardResult, shuffle: bool = True) 
     cards = list(flashcard_result.flashcards)
     if shuffle:
         random.shuffle(cards)
-    incorrect: list[Flashcard] = []
+    incorrect: list[QuizQuestion] = []
     correct = 0
     print(f"Starting quiz with {len(cards)} cards. Press Ctrl+C to stop early.\n")
     for index, card in enumerate(cards, start=1):
