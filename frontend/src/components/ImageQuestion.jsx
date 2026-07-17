@@ -60,6 +60,12 @@ export default function ImageQuestion({ question }) {
         )}
       </div>
       <p>{question.question}</p>
+      {question.image_generation_prompt && (
+        <details className="image-prompt">
+          <summary>Image-generator prompt</summary>
+          <p>{question.image_generation_prompt}</p>
+        </details>
+      )}
     </div>
   )
 }

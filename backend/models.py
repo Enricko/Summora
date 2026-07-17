@@ -41,11 +41,25 @@ class PracticeQuestion(StrictModel):
     answer_guide: str = Field(min_length=1)
     source_section: str = Field(min_length=1)
 
+class LearningMaterialSection(StrictModel):
+    title: str = Field(min_length=1)
+    explanation: str = Field(min_length=1)
+    key_takeaway: str = Field(min_length=1)
+    source_sections: list[str] = Field(min_length=1)
+    latex: Optional[str] = None
+
+class LearningReference(StrictModel):
+    label: str = Field(min_length=1)
+    source_section: str = Field(min_length=1)
+    url: Optional[str] = Field(default=None, pattern=r"^https?://")
+
 class SummaryInput(StrictModel):
     document: ReaderResult
     summary_length: Literal["short", "medium", "detailed"] = "medium"
     education_level: str = "university"
     output_language: str = "English"
+    content_style: str = "clear and structured"
+    tone: str = "supportive and academic"
     revision_instructions: list[str] = Field(default_factory=list)
 
 class SummaryResult(StrictModel):
@@ -55,20 +69,28 @@ class SummaryResult(StrictModel):
     important_terms: list[ImportantTerm] = Field(default_factory=list)
     practice_questions: list[PracticeQuestion] = Field(default_factory=list)
     learning_recommendations: list[str] = Field(default_factory=list)
+    learning_materials: list[LearningMaterialSection] = Field(default_factory=list)
+    references: list[LearningReference] = Field(default_factory=list)
 
 # --- New Quiz Types ---
 
 class QuizQuestionBase(StrictModel):
     question: str = Field(min_length=1)
     answer: str = Field(min_length=1)
+    explanation: str = ""
     difficulty: Literal["easy", "medium", "hard"]
     topic: str = Field(min_length=1)
     source_section: str = Field(min_length=1)
+    citations: list[str] = Field(default_factory=list)
     type: str
 
 class ImageQuestion(QuizQuestionBase):
     type: Literal["image"] = "image"
     image_search_query: str = Field(min_length=1, description="A search query to find an image related to this question.")
+    image_generation_prompt: str = Field(
+        min_length=1,
+        description="A detailed, reworked prompt suitable for an integrated image generator.",
+    )
 
 class EssayQuestion(QuizQuestionBase):
     type: Literal["essay"] = "essay"
@@ -86,7 +108,38 @@ class LanguageQuestion(QuizQuestionBase):
 class StandardFlashcard(QuizQuestionBase):
     type: Literal["standard"] = "standard"
 
-QuizQuestion = Union[ImageQuestion, EssayQuestion, MathQuestion, LanguageQuestion, StandardFlashcard]
+class MultipleChoiceQuestion(QuizQuestionBase):
+    type: Literal["multiple_choice"] = "multiple_choice"
+    options: list[str] = Field(min_length=3, max_length=6)
+    correct_option_index: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_correct_option(self) -> "MultipleChoiceQuestion":
+        if self.correct_option_index >= len(self.options):
+            raise ValueError("correct_option_index must point to an available option.")
+        return self
+
+class MatchingPair(StrictModel):
+    left: str = Field(min_length=1)
+    right: str = Field(min_length=1)
+
+class MatchingQuestion(QuizQuestionBase):
+    type: Literal["matching"] = "matching"
+    pairs: list[MatchingPair] = Field(min_length=2, max_length=8)
+    mapping_latex: str = Field(
+        min_length=1,
+        description="LaTeX representation of the completed mapping, such as A \\mapsto 1.",
+    )
+
+QuizQuestion = Union[
+    ImageQuestion,
+    EssayQuestion,
+    MathQuestion,
+    LanguageQuestion,
+    MultipleChoiceQuestion,
+    MatchingQuestion,
+    StandardFlashcard,
+]
 
 class FlashcardInput(StrictModel):
     summary: SummaryResult
@@ -94,8 +147,14 @@ class FlashcardInput(StrictModel):
     requested_count: int = Field(ge=1, le=100)
     education_level: str = "university"
     output_language: str = "English"
+    content_style: str = "clear and structured"
+    tone: str = "supportive and academic"
     revision_instructions: list[str] = Field(default_factory=list)
-    quiz_type: Literal["mixed", "image", "essay", "math", "language", "standard"] = "mixed"
+    quiz_type: Literal[
+        "mixed", "image", "essay", "math", "language", "standard", "multiple_choice", "matching"
+    ] = "mixed"
+    variation_seed: Optional[str] = None
+    excluded_questions: list[str] = Field(default_factory=list, max_length=30)
 
 class FlashcardResult(StrictModel):
     flashcards: list[QuizQuestion] = Field(min_length=1)
@@ -150,6 +209,21 @@ class WebResearchResult(StrictModel):
     limitations: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     searched_at: str = Field(min_length=1)
+
+class EssayGradingInput(StrictModel):
+    question: str = Field(min_length=1)
+    reference_answer: str = Field(min_length=1)
+    rubric: str = Field(min_length=1)
+    student_response: str = Field(min_length=1)
+    education_level: str = "university"
+    source_section: str = Field(min_length=1)
+
+class EssayGradingResult(StrictModel):
+    score: int = Field(ge=0, le=100)
+    feedback: str = Field(min_length=1)
+    strengths: list[str] = Field(default_factory=list)
+    improvements: list[str] = Field(default_factory=list)
+    confidence: int = Field(ge=0, le=100)
 
 class FinalSummoraResult(StrictModel):
     success: bool

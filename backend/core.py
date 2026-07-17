@@ -39,6 +39,7 @@ LOGGER = logging.getLogger("summora")
 PROVIDER = "gemini"  # Change to "deepseek".
 MODEL_NAME = ""      # Empty selects DEFAULT_MODELS[PROVIDER].
 MOCK_MODE = False    # True runs realistic local mock outputs without API calls.
+INTERACTIVE_RUNTIME = __name__ == "__main__"
 
 DEFAULT_MODELS = {
     "gemini": "gemini-3.5-flash",
@@ -71,7 +72,8 @@ if not 1 <= int(CONFIG["flashcard_count"]) <= 100:
     raise ValueError("CONFIG['flashcard_count'] must be between 1 and 100.")
 if not 1 <= int(CONFIG["maximum_retries"]) <= 3:
     raise ValueError("CONFIG['maximum_retries'] must be between 1 and 3.")
-print(f"Provider: {CONFIG['provider']} | Model: {CONFIG['model_name'] or DEFAULT_MODELS[CONFIG['provider']]} | Mock: {MOCK_MODE}")
+if INTERACTIVE_RUNTIME:
+    print(f"Provider: {CONFIG['provider']} | Model: {CONFIG['model_name'] or DEFAULT_MODELS[CONFIG['provider']]} | Mock: {MOCK_MODE}")
 
 
 def _read_colab_secret(secret_name: str) -> Optional[str]:
@@ -127,10 +129,11 @@ def setup_web_search_key(prompt_if_missing: bool = True) -> Optional[str]:
 
 API_KEY: Optional[str] = None
 TAVILY_API_KEY: Optional[str] = None
-if MOCK_MODE:
-    print("Mock mode enabled: no API key will be requested or used.")
-else:
-    print("API key not loaded yet. The Run Summora cell will call setup_api_key securely when needed.")
+if INTERACTIVE_RUNTIME:
+    if MOCK_MODE:
+        print("Mock mode enabled: no API key will be requested or used.")
+    else:
+        print("API key not loaded yet. The Run Summora cell will call setup_api_key securely when needed.")
 
 
 from .models import *
@@ -486,6 +489,12 @@ def _markdown_export(result: FinalSummoraResult) -> str:
     lines.extend(f"- **{item.question}** — {item.answer_guide} *(Source: {item.source_section})*" for item in summary.practice_questions)
     lines.extend(["", "## Learning Recommendations", ""])
     lines.extend(f"- {item}" for item in summary.learning_recommendations)
+    lines.extend(["", "## Learning Materials", ""])
+    lines.extend(
+        f"### {item.title}\n\n{item.explanation}\n\n**Key takeaway:** {item.key_takeaway}\n\n"
+        f"*Sources: {', '.join(item.source_sections)}*"
+        for item in summary.learning_materials
+    )
     lines.extend(["", "## Flashcards", ""])
     lines.extend(
         f"- **Q:** {card.question}  \n  **A:** {card.answer}  \n  *{card.difficulty.title()} · {card.topic} · Source: {card.source_section}*"
@@ -510,7 +519,11 @@ def export_results(result: FinalSummoraResult, output_directory: str | Path = ".
     markdown_path.write_text(_markdown_export(result), encoding="utf-8")
     cards = result.flashcard_result.flashcards if result.flashcard_result else []
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["question", "answer", "difficulty", "topic", "source_section"])
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["question", "answer", "difficulty", "topic", "source_section"],
+            extrasaction="ignore",
+        )
         writer.writeheader()
         writer.writerows(card.model_dump() for card in cards)
     return {"json": json_path, "markdown": markdown_path, "csv": csv_path}
@@ -792,6 +805,33 @@ Return valid JSON only matching the supplied schema exactly, with no Markdown fe
         )
 
     @staticmethod
+    def _complete_learning_materials(summary: SummaryResult) -> SummaryResult:
+        """Guarantee a pre-quiz material and reference layer even if a provider omits optional fields."""
+        materials = list(summary.learning_materials)
+        if not materials:
+            materials = [
+                LearningMaterialSection(
+                    title=f"Core idea {index}",
+                    explanation=point.point,
+                    key_takeaway=point.point,
+                    source_sections=[point.source_section],
+                )
+                for index, point in enumerate(summary.key_points[:5], start=1)
+            ]
+        references = list(summary.references)
+        if not references:
+            seen: set[str] = set()
+            for point in summary.key_points:
+                if point.source_section in seen:
+                    continue
+                seen.add(point.source_section)
+                references.append(LearningReference(
+                    label=point.source_section,
+                    source_section=point.source_section,
+                ))
+        return summary.model_copy(update={"learning_materials": materials, "references": references})
+
+    @staticmethod
     def _document_chunks(document: ReaderResult, maximum_characters: int) -> list[ReaderResult]:
         chunks: list[ReaderResult] = []
         current: list[DocumentSection] = []
@@ -836,12 +876,17 @@ Return valid JSON only matching the supplied schema exactly, with no Markdown fe
         return f"""Output language: {agent_input.output_language}
 Student education level: {agent_input.education_level}
 Requested summary length: {agent_input.summary_length}
+Adaptive content style: {agent_input.content_style}
+Adaptive tone: {agent_input.tone}
 Context type: {context_label}
 Revision instructions: {revision}
 Output schema: {schema}
 
 Create a concise summary, a detailed summary, key points, important terms, 3-5 practice questions,
-and actionable learning recommendations. Major items must cite exact source_section headings. JSON only.
+actionable learning recommendations, and in-depth learning_materials that appear before the quiz.
+Adapt the structure and tone to the topic. Populate references for the supplied source headings.
+Use LaTeX in learning_materials.latex when a formula or structural mapping benefits from it.
+Major items must cite exact source_section headings. JSON only.
 
 SUPPLIED GROUNDED CONTENT:
 {document_payload}"""
@@ -849,7 +894,7 @@ SUPPLIED GROUNDED CONTENT:
     def execute(self, agent_input: SummaryInput) -> SummaryResult:
         validated = self.input_model.model_validate(agent_input)
         if isinstance(self.provider, MockProvider):
-            return self._mock_summary(validated)
+            return self._complete_learning_materials(self._mock_summary(validated))
         maximum = int(self.config.get("maximum_chunk_characters", 10_000))
         chunks = self._document_chunks(validated.document, maximum)
         partials = [
@@ -860,7 +905,7 @@ SUPPLIED GROUNDED CONTENT:
             for index, chunk in enumerate(chunks, start=1)
         ]
         if len(partials) == 1:
-            return partials[0]
+            return self._complete_learning_materials(partials[0])
         reduction_round = 1
         while len(partials) > 1:
             reduced: list[SummaryResult] = []
@@ -880,7 +925,7 @@ SUPPLIED GROUNDED CONTENT:
                 ))
             partials = reduced
             reduction_round += 1
-        return partials[0]
+        return self._complete_learning_materials(partials[0])
 
 
 class FlashcardAgent(AgentBase):
@@ -891,8 +936,15 @@ class FlashcardAgent(AgentBase):
     output_model = FlashcardResult
     temperature = 0.3
     system_instruction = """AGENT_ID: FLASHCARD
-You are Summora's independent Quiz Agent. Generate quiz questions using the specified quiz_type (e.g. image, essay, math, language, standard, or mixed).
-When generating image questions, provide an image_search_query.
+You are Summora's independent Quiz Agent. Generate quiz questions using the specified quiz_type
+(multiple_choice, matching, image, essay, math, language, standard, or mixed).
+Adapt tone, formatting, cognitive load, and difficulty to the topic, student level, and supplied style.
+Every question must include a detailed explanation and citations containing exact supplied source headings.
+For multiple-choice questions, create plausible, mutually exclusive options and a valid correct_option_index.
+For matching questions, create cohesive one-to-one pairs and mapping_latex using \\mapsto.
+When generating image questions, provide an image_search_query and a highly descriptive
+image_generation_prompt. Specify the educational subject, composition, labels, contrast, visual style,
+and details to avoid. The image prompt must not reveal the answer.
 When generating essay questions, provide a grading rubric.
 When generating math questions, latex_formula is a HINT shown before the answer. Provide only the general
 formula needed to solve the question, using variable names. Never substitute the question's numbers, show
@@ -905,7 +957,8 @@ the answer in parentheses, after a colon, or in any auxiliary field shown before
 When generating language questions, audio_text must be an exact character-for-character copy of question.
 Set pronunciation_guide to null unless pronunciation itself is what the learner is being asked to produce;
 it must never reveal the answer.
-Follow the exact requested count and difficulty distribution. Use an exact supplied heading for every source_section. Return valid JSON exactly matching the requested schema."""
+Follow the exact requested count and difficulty distribution. Use an exact supplied heading for every
+source_section. Return valid JSON exactly matching the requested schema."""
 
     def _mock_flashcards(self, agent_input: FlashcardInput) -> FlashcardResult:
         summary = agent_input.summary
@@ -959,13 +1012,17 @@ Follow the exact requested count and difficulty distribution. Use an exact suppl
                 topic, source = "Concept connection", point.source_section
             requested_type = agent_input.quiz_type
             if requested_type == "mixed":
-                requested_type = ("standard", "essay", "math", "language", "image")[index % 5]
+                requested_type = (
+                    "multiple_choice", "standard", "matching", "essay", "math", "language", "image"
+                )[index % 7]
             common = dict(
                 question=question,
                 answer=answer,
+                explanation=answer,
                 difficulty=difficulty,
                 topic=topic,
                 source_section=source,
+                citations=[source],
             )
             if requested_type == "essay":
                 cards.append(EssayQuestion(**common, rubric="Explain the key idea accurately, connect it to the source, and avoid unsupported claims."))
@@ -975,10 +1032,54 @@ Follow the exact requested count and difficulty distribution. Use an exact suppl
             elif requested_type == "language":
                 cards.append(LanguageQuestion(**common, audio_text=question, pronunciation_guide=None))
             elif requested_type == "image":
-                cards.append(ImageQuestion(**common, image_search_query=topic))
+                cards.append(ImageQuestion(
+                    **common,
+                    image_search_query=topic,
+                    image_generation_prompt=(
+                        f"Create a clear educational illustration about {topic}. Use a simple labeled "
+                        "composition, high contrast, a neutral background, and age-appropriate detail. "
+                        "Do not include the answer, solution steps, or misleading decorative text."
+                    ),
+                ))
+            elif requested_type == "multiple_choice":
+                cards.append(MultipleChoiceQuestion(
+                    **common,
+                    options=[
+                        answer,
+                        "A related claim not supported by this source",
+                        "An incomplete interpretation of the source",
+                        "A claim that reverses the relationship in the material",
+                    ],
+                    correct_option_index=0,
+                ))
+            elif requested_type == "matching":
+                match_terms = list(terms[:3])
+                while len(match_terms) < 3:
+                    match_terms.append(term)
+                pairs = [MatchingPair(left=item.term, right=item.definition) for item in match_terms]
+                cards.append(MatchingQuestion(
+                    **common,
+                    pairs=pairs,
+                    mapping_latex=" \\quad ".join(
+                        f"{position + 1} \\mapsto {chr(65 + position)}"
+                        for position in range(len(pairs))
+                    ),
+                ))
             else:
                 cards.append(StandardFlashcard(**common))
         return FlashcardResult(flashcards=cards)
+
+    @staticmethod
+    def _complete_question_metadata(cards: list[QuizQuestion]) -> list[QuizQuestion]:
+        completed: list[QuizQuestion] = []
+        for card in cards:
+            updates: dict[str, Any] = {}
+            if not card.citations:
+                updates["citations"] = [card.source_section]
+            if not card.explanation.strip():
+                updates["explanation"] = card.answer
+            completed.append(card.model_copy(update=updates) if updates else card)
+        return completed
 
     @staticmethod
     def _deduplicate(cards: list[QuizQuestion]) -> list[QuizQuestion]:
@@ -1036,16 +1137,24 @@ Follow the exact requested count and difficulty distribution. Use an exact suppl
         targets = difficulty_targets(agent_input.requested_count)
         revision = "\n".join(f"- {item}" for item in agent_input.revision_instructions) or "None"
         prior_text = prior.model_dump_json(indent=2) if prior else "None"
+        excluded = "\n".join(f"- {item}" for item in agent_input.excluded_questions) or "None"
         
         # Guide the schema based on quiz_type
-        type_instruction = f"Generate ONLY {agent_input.quiz_type} questions." if agent_input.quiz_type != "mixed" else "Generate a MIX of question types (image, essay, math, language, standard)."
+        type_instruction = f"Generate ONLY {agent_input.quiz_type} questions." if agent_input.quiz_type != "mixed" else (
+            "Generate a MIX of question types (multiple_choice, matching, image, essay, math, language, standard)."
+        )
         
         return f"""Output language: {agent_input.output_language}
 Student education level: {agent_input.education_level}
+Adaptive content style: {agent_input.content_style}
+Adaptive tone: {agent_input.tone}
 Quiz Type Requested: {agent_input.quiz_type} ({type_instruction})
 Exact flashcard count: {agent_input.requested_count}
 Exact difficulty counts: {json.dumps(targets)}
 Allowed source_section values: {json.dumps(agent_input.source_sections, ensure_ascii=False)}
+Variation seed: {agent_input.variation_seed or 'initial'}
+Questions to avoid repeating:
+{excluded}
 Revision instructions: {revision}
 Output schema: {json.dumps(self.output_model.model_json_schema(), ensure_ascii=False)}
 Prior attempt to replace if present: {prior_text}
@@ -1060,7 +1169,7 @@ GROUNDED SUMMARY:
         if isinstance(self.provider, MockProvider):
             return self._mock_flashcards(validated)
         first = self._generate_validated(self._prompt(validated), FlashcardResult)
-        cleaned = self._deduplicate(first.flashcards)
+        cleaned = self._deduplicate(self._complete_question_metadata(first.flashcards))
         balanced = self._sanitize_pre_reveal_content(
             self._enforce_distribution(cleaned, validated.requested_count)
         )
@@ -1075,7 +1184,7 @@ GROUNDED SUMMARY:
             return FlashcardResult(flashcards=balanced)
 
         second = self._generate_validated(self._prompt(validated, first), FlashcardResult)
-        combined = self._deduplicate(second.flashcards + cleaned)
+        combined = self._deduplicate(self._complete_question_metadata(second.flashcards) + cleaned)
         balanced = self._sanitize_pre_reveal_content(
             self._enforce_distribution(combined, validated.requested_count)
         )
@@ -1106,7 +1215,8 @@ supplied original educational material. Detect unsupported statements, missing i
 duplicate or ambiguous flashcards, overly long answers, incorrect formulas, poor difficulty labels,
 math formula hints that reveal substituted values, intermediate work, or the final answer,
 questions or pre-reveal auxiliary fields that contain the answer, and language audio_text that differs
-from the visible question,
+from the visible question. Verify that every question has valid source citations, useful explanations,
+plausible multiple-choice distractors, cohesive one-to-one matching pairs, and non-revealing image prompts.
 grammar problems, and explanations unsuitable for the selected student education level. Do not introduce
 new subject-matter facts. Cite exact source headings in issue descriptions when possible. Follow the
 selected output language. Score quality from 0 to 100; approved must be true exactly when the score is at
@@ -1131,6 +1241,12 @@ schema exactly, with no Markdown fences or commentary."""
         if invalid_sources:
             issues.append("Some flashcards reference source sections that do not exist in the Reader result.")
             instructions.append("Use exact Reader section headings for every source_section.")
+        missing_citations = [
+            index for index, card in enumerate(agent_input.flashcards.flashcards) if not card.citations
+        ]
+        if missing_citations:
+            issues.append(f"Questions are missing citations at indices: {missing_citations}.")
+            instructions.append("Add at least one exact source heading citation to every question.")
         score = max(0, 96 - 15 * len(issues))
         threshold = int(self.config.get("review_threshold", 75))
         return ReviewResult(
@@ -1186,12 +1302,77 @@ GENERATED FLASHCARDS:
         return review.model_copy(update={"approved": approved, "issues": issues, "revision_instructions": instructions})
 
 
+class EssayGradingAgent(AgentBase):
+    """Grade one essay response against a source-grounded answer and explicit rubric."""
+
+    name = "Essay Grading Agent"
+    input_model = EssayGradingInput
+    output_model = EssayGradingResult
+    temperature = 0.1
+    system_instruction = """AGENT_ID: ESSAY_GRADER
+Grade only against the supplied question, reference answer, rubric, and source section. Do not reward
+unsupported claims or writing length by itself. Give a score from 0 to 100, concise constructive feedback,
+specific strengths and improvements, and a confidence score. If the response is too short or the evidence
+is insufficient, say so explicitly. Return valid JSON only matching the supplied schema."""
+
+    @staticmethod
+    def _mock_grade(agent_input: EssayGradingInput) -> EssayGradingResult:
+        reference_terms = set(normalize_question(agent_input.reference_answer).split())
+        response_terms = set(normalize_question(agent_input.student_response).split())
+        overlap = len(reference_terms & response_terms) / max(1, len(reference_terms))
+        length_factor = min(1.0, len(agent_input.student_response.split()) / 40)
+        score = round(min(100, (overlap * 75) + (length_factor * 25)))
+        return EssayGradingResult(
+            score=score,
+            feedback=(
+                "The response addresses the grounded answer and rubric."
+                if score >= 70 else
+                "The response needs a clearer connection to the source-grounded answer and rubric."
+            ),
+            strengths=["Uses terminology found in the reference answer."] if overlap else [],
+            improvements=[] if score >= 70 else ["Add the key source-supported ideas and explain their relationship."],
+            confidence=80,
+        )
+
+    def execute(self, agent_input: EssayGradingInput) -> EssayGradingResult:
+        validated = self.input_model.model_validate(agent_input)
+        if isinstance(self.provider, MockProvider):
+            return self._mock_grade(validated)
+        prompt = f"""Student education level: {validated.education_level}
+Source section: {validated.source_section}
+Question: {validated.question}
+Reference answer: {validated.reference_answer}
+Rubric: {validated.rubric}
+Student response: {validated.student_response}
+Output schema: {json.dumps(self.output_model.model_json_schema(), ensure_ascii=False)}"""
+        return self._generate_validated(prompt, EssayGradingResult)
+
+
 class WebSearchProvider(ABC):
     """Provider-neutral search interface used only by the Web Research Agent."""
 
     @abstractmethod
     def search(self, agent_input: WebResearchInput) -> list[WebSource]:
         raise NotImplementedError
+
+
+TAVILY_MAX_QUERY_LENGTH = 399
+
+
+def prepare_web_search_query(query: str, maximum_characters: int = TAVILY_MAX_QUERY_LENGTH) -> str:
+    """Normalize long document text into a Tavily-compatible search query."""
+    if maximum_characters < 3:
+        raise ValueError("maximum_characters must be at least 3.")
+    normalized = re.sub(r"\s+", " ", query).strip()
+    if len(normalized) <= maximum_characters:
+        return normalized
+
+    clipped = normalized[:maximum_characters - 3]
+    word_boundary = clipped.rfind(" ")
+    if word_boundary > maximum_characters // 2:
+        clipped = clipped[:word_boundary]
+    clipped = clipped.rstrip(" ,.;:!?-")
+    return f"{clipped}..."
 
 
 class TavilySearchProvider(WebSearchProvider):
@@ -1211,7 +1392,7 @@ class TavilySearchProvider(WebSearchProvider):
 
     def search(self, agent_input: WebResearchInput) -> list[WebSource]:
         payload: dict[str, Any] = {
-            "query": agent_input.query,
+            "query": prepare_web_search_query(agent_input.query),
             "search_depth": agent_input.search_depth,
             "topic": agent_input.topic,
             "max_results": agent_input.max_sources,
@@ -1717,7 +1898,8 @@ def choose_input_file() -> str:
 
 
 SELECTED_FILE = ""  # Example: "sample_educational_text.md"
-print("Set SELECTED_FILE directly, or run: SELECTED_FILE = choose_input_file()")
+if INTERACTIVE_RUNTIME:
+    print("Set SELECTED_FILE directly, or run: SELECTED_FILE = choose_input_file()")
 
 
 def display_summora_result(result: FinalSummoraResult) -> None:
@@ -1786,19 +1968,20 @@ def create_summora_app() -> SummoraOrchestrator:
 
 
 try:
-    # A selected file or enabled web research needs an initialized application.
-    if SELECTED_FILE or CONFIG.get("web_research_enabled", False):
-        summora = create_summora_app()
-    if SELECTED_FILE and summora is not None:
-        RESULT = summora.process_document(SELECTED_FILE)
-        display_summora_result(RESULT)
-    elif summora is not None:
-        print("Summora is ready for prompt-based web research. Continue to the next cell.")
-    else:
-        print(
-            "No file selected. Set SELECTED_FILE, or enable CONFIG['web_research_enabled'] "
-            "for prompt-based research, then rerun this cell."
-        )
+    if INTERACTIVE_RUNTIME:
+        # A selected file or enabled web research needs an initialized application.
+        if SELECTED_FILE or CONFIG.get("web_research_enabled", False):
+            summora = create_summora_app()
+        if SELECTED_FILE and summora is not None:
+            RESULT = summora.process_document(SELECTED_FILE)
+            display_summora_result(RESULT)
+        elif summora is not None:
+            print("Summora is ready for prompt-based web research. Continue to the next cell.")
+        else:
+            print(
+                "No file selected. Set SELECTED_FILE, or enable CONFIG['web_research_enabled'] "
+                "for prompt-based research, then rerun this cell."
+            )
 except Exception as exc:
     RESULT = FinalSummoraResult(
         success=False,
@@ -1827,7 +2010,7 @@ def display_web_research_result(research: WebResearchResult) -> None:
 USER_RESEARCH_PROMPT = ""  # Example: "What recent context helps explain photosynthesis research?"
 WEB_RESEARCH_RESULT: Optional[WebResearchResult] = None
 
-if USER_RESEARCH_PROMPT:
+if INTERACTIVE_RUNTIME and USER_RESEARCH_PROMPT:
     if summora is None:
         print("Create the orchestrator in Section 15 first.")
     else:
@@ -1836,7 +2019,7 @@ if USER_RESEARCH_PROMPT:
             display_web_research_result(WEB_RESEARCH_RESULT)
         except Exception as exc:
             print(f"Web research could not complete: {sanitize_error(exc)}")
-else:
+elif INTERACTIVE_RUNTIME:
     print("Set USER_RESEARCH_PROMPT and rerun this cell to perform optional cited web research.")
 
 # Direct prompt-to-study-material example:
@@ -1848,6 +2031,8 @@ else:
 
 
 try:
+    if not INTERACTIVE_RUNTIME:
+        raise ImportError
     import ipywidgets as widgets
 
     provider_widget = widgets.Dropdown(options=["gemini", "deepseek"], value=CONFIG["provider"], description="Provider")
@@ -1872,16 +2057,17 @@ try:
     apply_button.on_click(apply_widget_config)
     display(widgets.VBox([provider_widget, length_widget, level_widget, language_widget, count_widget, web_widget, apply_button]))
 except ImportError:
-    print("ipywidgets is unavailable; edit CONFIG directly. All core features still work.")
+    if INTERACTIVE_RUNTIME:
+        print("ipywidgets is unavailable; edit CONFIG directly. All core features still work.")
 
 
 EXPORT_DIRECTORY = "."
-if RESULT is not None:
+if INTERACTIVE_RUNTIME and RESULT is not None:
     exported = export_results(RESULT, EXPORT_DIRECTORY)
     print("Exported:")
     for format_name, path in exported.items():
         print(f"- {format_name}: {path.resolve()}")
-else:
+elif INTERACTIVE_RUNTIME:
     print("No RESULT yet. Run Summora first, then rerun this export cell.")
 
 
@@ -2042,9 +2228,9 @@ def run_summora_tests() -> pd.DataFrame:
     return frame
 
 
-if MOCK_MODE:
+if INTERACTIVE_RUNTIME and MOCK_MODE:
     TEST_RESULTS = run_summora_tests()
-else:
+elif INTERACTIVE_RUNTIME:
     print("Set MOCK_MODE = True and rerun configuration onward to execute all tests without API requests.")
 
 

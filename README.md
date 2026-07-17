@@ -2,9 +2,37 @@
 
 **Your notes, simplified.**
 
-Summora is a notebook-based, multi-agent educational note summarizer. Independent Reader, Summary, Flashcard, and Reviewer agents turn PDF, TXT, or Markdown learning material into structured notes, two summary depths, key points, terms, flashcards, practice-ready quiz content, learning recommendations, and a grounded quality review. An optional Web Research Agent can search from a user prompt, preserve source URLs, and feed cited context into the same workflow.
+Summora is a multi-agent learning module and quiz generator available as a web app and notebook. Independent Reader, Summary, Quiz, Reviewer, and Essay Grading agents turn PDF, TXT, or Markdown material into structured lessons, adaptive assessments, source-grounded feedback, and exportable study sessions. An optional Web Research Agent can search from a user prompt, preserve source URLs, and feed cited context into the same workflow.
 
-## Quick start
+## Web app
+
+The web app supports multiple-choice, short-answer, matching, essay, math, language, image-prompt, and mixed quizzes. It includes:
+
+- topic- and level-adaptive content style, tone, and difficulty
+- detailed learning materials and source citations before the quiz
+- server-held answer keys that are released only after final scoring
+- objective scoring plus AI-assisted essay feedback
+- quiz shuffling and source-grounded new variations
+- LaTeX mappings, visual-question generation prompts, and text-to-speech controls
+- JSON download, print/PDF-ready output, accuracy diagnostics, and local performance history
+
+Start the API and frontend in separate terminals:
+
+```bash
+uvicorn backend.main:app --reload
+```
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the URL printed by Vite (normally `http://127.0.0.1:5173`). Set `GEMINI_API_KEY` or `DEEPSEEK_API_KEY` in `.env`; `MOCK_MODE=true` runs the complete pipeline without external model calls. Optional web research uses `TAVILY_API_KEY`.
+
+Quiz answer keys are kept in API memory for four hours in this MVP. Production deployments should replace this with an encrypted shared session store so scoring works safely across multiple server instances.
+
+## Notebook quick start
 
 1. Use Python 3.10 or newer and install dependencies:
 
@@ -36,7 +64,9 @@ To try the entire workflow without an API call, set `MOCK_MODE = True`. The incl
 
 ## Files
 
-- `summora_multi_agent.ipynb` — complete application, tests, quiz, exports, and optional evaluation
+- `backend/` — FastAPI agents, schemas, scoring endpoints, and automated pipeline tests
+- `frontend/` — React learning and quiz interface
+- `summora_multi_agent.ipynb` — notebook workflow, tests, quiz, exports, and optional evaluation
 - `sample_educational_text.md` — sample lesson
 - `sample_evaluation.csv` — optional evaluation dataset
 - `example_summora_result.json` — example mock-mode export

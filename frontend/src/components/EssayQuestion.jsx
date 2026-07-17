@@ -1,4 +1,4 @@
-export default function EssayQuestion({ question }) {
+export default function EssayQuestion({ question, value, onChange, disabled }) {
   return (
     <div>
       <p style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>{question.question}</p>
@@ -6,6 +6,9 @@ export default function EssayQuestion({ question }) {
         className="essay-response"
         rows={6} 
         placeholder="Write your essay here..."
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
       />
       {question.rubric && (
         <div style={{ background: 'rgba(236, 72, 153, 0.1)', border: '1px solid var(--accent-pink)', padding: '1rem', borderRadius: '8px', fontSize: '0.9rem' }}>
